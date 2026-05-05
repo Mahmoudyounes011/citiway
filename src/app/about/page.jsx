@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useReveal, useCounter } from '../../hooks/useReveal';
+import { Icon } from '../../components/Icons';
 
 function AnimatedNumber({ value, suffix = '', prefix = '' }) {
   const [ref, count] = useCounter(value, 2500);
@@ -22,7 +23,7 @@ function ValueCard({ icon, title, description, index }) {
       style={{ transitionDelay: `${index * 100}ms`, borderRadius: '6px', boxShadow: '0 4px 12px rgba(15, 36, 68, 0.06)' }}
     >
       <div className="w-14 h-14 rounded-full flex items-center justify-center mb-6 transition-all duration-500 group-hover:scale-110" style={{ background: 'linear-gradient(135deg, #e8f1fb 0%, #bbdefb 100%)' }}>
-        <span className="text-2xl">{icon}</span>
+        <Icon name={icon} className="w-6 h-6" stroke="#1565c0" />
       </div>
       <h3 className="font-display text-2xl text-navy-900 mb-3 transition-colors duration-500 group-hover:text-blue-600" style={{ fontWeight: 500, letterSpacing: '-0.01em', color: '#0f2444' }}>
         {title}
@@ -103,12 +104,12 @@ export default function AboutPage() {
   ];
 
   const values = [
-    { icon: '🎯', title: 'Integrity First', description: 'Every recommendation we make is grounded in transparency. We tell our clients what they need to hear, not what they want to hear — because lasting relationships are built on trust.' },
-    { icon: '💎', title: 'Curation Over Volume', description: 'We don\'t chase listings. We hand-select properties that meet our exacting standards for architectural merit, location, and long-term value. Quality over quantity, always.' },
-    { icon: '🌍', title: 'Global Perspective', description: 'Our clients hail from over 50 nationalities. This international DNA shapes how we work — bridging cultures, languages, and expectations to deliver truly bespoke service.' },
-    { icon: '📊', title: 'Data-Driven Advisory', description: 'Every recommendation is backed by rigorous market analysis. ROI projections, capital appreciation forecasts, comparative pricing — we treat your property as the investment it is.' },
-    { icon: '🤝', title: 'Lifelong Partnership', description: 'A property purchase is the beginning, not the end. We measure success in client retention rates, referrals, and decade-long relationships — not transactions.' },
-    { icon: '⚡', title: 'Discreet Excellence', description: 'Our highest-value transactions never appear publicly. Off-market deals, private sales, confidential acquisitions — we operate with the discretion our clients deserve.' },
+    { icon: 'badge-check', title: 'Integrity First', description: 'Every recommendation we make is grounded in transparency. We tell our clients what they need to hear, not what they want to hear — because lasting relationships are built on trust.' },
+    { icon: 'star', title: 'Curation Over Volume', description: 'We don\'t chase listings. We hand-select properties that meet our exacting standards for architectural merit, location, and long-term value. Quality over quantity, always.' },
+    { icon: 'globe', title: 'Global Perspective', description: 'Our clients hail from over 50 nationalities. This international DNA shapes how we work — bridging cultures, languages, and expectations to deliver truly bespoke service.' },
+    { icon: 'trending', title: 'Data-Driven Advisory', description: 'Every recommendation is backed by rigorous market analysis. ROI projections, capital appreciation forecasts, comparative pricing — we treat your property as the investment it is.' },
+    { icon: 'users', title: 'Lifelong Partnership', description: 'A property purchase is the beginning, not the end. We measure success in client retention rates, referrals, and decade-long relationships — not transactions.' },
+    { icon: 'shield', title: 'Discreet Excellence', description: 'Our highest-value transactions never appear publicly. Off-market deals, private sales, confidential acquisitions — we operate with the discretion our clients deserve.' },
   ];
 
   const timeline = [
@@ -150,7 +151,7 @@ export default function AboutPage() {
   return (
     <>
       {/* HERO */}
-      <section ref={heroRef} className="relative min-h-[80vh] flex items-end overflow-hidden" style={{ marginTop: '-80px' }}>
+      <section ref={heroRef} className="relative min-h-[80vh] flex items-end overflow-hidden">
         <div className="absolute inset-0">
           <video
             autoPlay
@@ -169,7 +170,7 @@ export default function AboutPage() {
           }} />
         </div>
 
-        <div className="relative z-10 w-full px-5 md:px-12 lg:px-24 pb-16 md:pb-24 pt-32">
+        <div className="relative z-10 w-full px-5 md:px-12 lg:px-24 pb-16 md:pb-24 pt-16">
           <div className="max-w-[1500px] mx-auto">
             {/* Breadcrumb */}
             <div className={`flex items-center gap-2 text-[11px] tracking-wider mb-8 transition-all duration-1000 ${heroVisible ? 'opacity-100' : 'opacity-0'}`}>

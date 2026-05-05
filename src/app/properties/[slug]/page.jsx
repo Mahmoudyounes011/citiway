@@ -1,350 +1,820 @@
 'use client';
-import { useState } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { getPropertyBySlug, getRelatedProperties } from '../../../data/properties';
+import Link from 'next/link';
+import { properties as staticProperties } from '../../../data/properties';
+import { supabase } from '../../../lib/supabase';
+import { Icon, AMENITY_ICON_MAP } from '../../../components/Icons';
 
-export default function PropertyDetail() {
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'gallery', label: 'Gallery' },
+  { id: 'features', label: 'Features' },
+  { id: 'amenities', label: 'Amenities' },
+  { id: 'location', label: 'Location' },
+  { id: 'payment', label: 'Payment' },
+];
+
+export default function PropertyDetailPage() {
   const params = useParams();
-  const property = getPropertyBySlug(params.slug);
+  const slug = params.slug;
+  const [property, setProperty] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
   const [activeImage, setActiveImage] = useState(0);
-  const [showGallery, setShowGallery] = useState(false);
-  const [inquirySent, setInquirySent] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(0);
+  const [showInquiryForm, setShowInquiryForm] = useState(false);
 
-  if (!property) {
+  const overviewRef = useRef(null);
+  const galleryRef = useRef(null);
+  const featuresRef = useRef(null);
+  const amenitiesRef = useRef(null);
+  const locationRef = useRef(null);
+  const paymentRef = useRef(null);
+
+  const sectionRefs = {
+    overview: overviewRef,
+    gallery: galleryRef,
+    features: featuresRef,
+    amenities: amenitiesRef,
+    location: locationRef,
+    payment: paymentRef,
+  };
+
+  useEffect(() => {
+    if (!slug) return;
+    const loadProperty = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('properties')
+          .select('*')
+          .eq('slug', slug)
+          .single();
+
+        if (!error && data) {
+          setProperty({
+            slug: data.slug,
+            title: data.title,
+            subtitle: data.subtitle,
+            developer: data.developer,
+            location: data.location,
+            subLocation: data.sub_location,
+            category: data.category,
+            type: data.type,
+            status: data.status,
+            featured: data.featured,
+            price: data.price,
+            priceFrom: data.price_from,
+            priceUnit: data.price_unit,
+            completion: data.completion,
+            paymentPlan: data.payment_plan,
+            roi: data.roi,
+            bedrooms: data.bedrooms,
+            bathrooms: data.bathrooms,
+            areaMin: data.area_min,
+            areaMax: data.area_max,
+            unit: data.unit,
+            coverImage: data.cover_image,
+            gallery: data.gallery || [],
+            description: data.description,
+            longDescription: data.long_description,
+            features: data.features || [],
+            amenities: data.amenities || [],
+            paymentSchedule: data.payment_schedule || [],
+            nearby: data.nearby || [],
+            location_coords: { lat: data.location_lat, lng: data.location_lng },
+          });
+        } else {
+          const found = staticProperties.find(p => p.slug === slug);
+          if (found) setProperty(found);
+        }
+      } catch (e) {
+        const found = staticProperties.find(p => p.slug === slug);
+        if (found) setProperty(found);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadProperty();
+  }, [slug]);
+
+  useEffect(() => {
+    if (!lightboxOpen || !property) return;
+    const imgs = [property.coverImage, ...(property.gallery || [])].filter(Boolean);
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setLightboxOpen(false);
+      else if (e.key === 'ArrowLeft') setLightboxImage((i) => (i - 1 + imgs.length) % imgs.length);
+      else if (e.key === 'ArrowRight') setLightboxImage((i) => (i + 1) % imgs.length);
+    };
+    window.addEventListener('keydown', handleKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = '';
+    };
+  }, [lightboxOpen, property]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 200;
+      for (const [id, ref] of Object.entries(sectionRefs)) {
+        if (ref.current) {
+          const top = ref.current.offsetTop;
+          const bottom = top + ref.current.offsetHeight;
+          if (scrollPosition >= top && scrollPosition < bottom) {
+            setActiveTab(id);
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [property]);
+
+  const scrollToSection = (id) => {
+    setActiveTab(id);
+    const ref = sectionRefs[id];
+    if (ref?.current) {
+      const offset = 180;
+      const top = ref.current.offsetTop - offset;
+      window.scrollTo({ top, behavior: 'smooth' });
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center px-6">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-3xl font-light text-ink-900 mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>
-            Property Not Found
-          </h1>
-          <Link href="/properties" className="btn btn-dark">Browse All Properties</Link>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="mt-4 text-slate-500">Loading property...</div>
         </div>
       </div>
     );
   }
 
-  const related = getRelatedProperties(params.slug);
+  if (!property) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="text-center max-w-md">
+          <Icon name="search-empty" className="w-20 h-20 mx-auto mb-4 text-slate-300" />
+          <h2 className="font-display text-3xl mb-3" style={{ color: '#0f2444' }}>Property Not Found</h2>
+          <p className="text-slate-500 mb-6">The property you're looking for doesn't exist or has been removed.</p>
+          <Link href="/properties" className="inline-flex items-center gap-2 px-6 py-3 text-white rounded-lg font-semibold" style={{ background: 'linear-gradient(135deg, #1e88e5 0%, #1565c0 100%)' }}>
+            <Icon name="arrow-left" className="w-4 h-4" />
+            Browse All Properties
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setInquirySent(true);
-    setTimeout(() => setInquirySent(false), 3000);
-  };
+  const allImages = [property.coverImage, ...(property.gallery || [])].filter(Boolean);
+  const heroImage = allImages[activeImage] || property.coverImage;
 
   return (
     <>
-      {/* Breadcrumb */}
-      <section className="pt-6 md:pt-10 pb-4 md:pb-6 px-5 md:px-6 bg-white border-b border-gray-100">
-        <div className="max-w-[1400px] mx-auto">
-          <div className="flex items-center gap-2 text-[11px] tracking-wider flex-wrap">
-            <Link href="/" className="text-ink-500 hover:text-gold-600 transition-colors">Home</Link>
-            <span className="text-ink-300">/</span>
-            <Link href={property.category === 'off-plan' ? '/off-plan' : '/properties'} className="text-ink-500 hover:text-gold-600 transition-colors">
-              {property.category === 'off-plan' ? 'Off-Plan' : 'Properties'}
+      {/* HERO */}
+      <section className="relative bg-slate-900 pt-12 pb-8">
+        <div className="max-w-7xl mx-auto px-6 lg:px-16">
+          {/* Breadcrumbs */}
+          <div className="text-xs text-white/60 mb-4 flex items-center gap-2">
+            <Link href="/" className="hover:text-white">Home</Link>
+            <Icon name="chevron-right" className="w-3 h-3" />
+            <Link href={`/${property.category === 'sale' ? 'properties' : property.category === 'rent' ? 'rent' : 'off-plan'}`} className="hover:text-white">
+              {property.category === 'sale' ? 'For Sale' : property.category === 'rent' ? 'For Rent' : 'Off-Plan'}
             </Link>
-            <span className="text-ink-300">/</span>
-            <span className="text-gold-600 font-semibold line-clamp-1">{property.title}</span>
+            <Icon name="chevron-right" className="w-3 h-3" />
+            <span className="text-white">{property.title}</span>
+          </div>
+
+          {/* Title Bar */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap mb-3">
+                {property.status && (
+                  <span className="text-[10px] px-3 py-1.5 rounded-full font-bold uppercase tracking-wider text-white" style={{ background: 'linear-gradient(135deg, #1e88e5, #1565c0)' }}>
+                    {property.status}
+                  </span>
+                )}
+                {property.featured && (
+                  <span className="text-[10px] px-3 py-1.5 rounded-full font-bold uppercase tracking-wider bg-amber-500 text-white flex items-center gap-1">
+                    <Icon name="star" className="w-3 h-3" />
+                    Featured
+                  </span>
+                )}
+                {property.developer && (
+                  <span className="text-xs text-white/70">by <span className="font-semibold text-white">{property.developer}</span></span>
+                )}
+              </div>
+              <h1 className="font-display text-3xl md:text-5xl text-white font-light leading-tight mb-2">
+                {property.title}
+              </h1>
+              {property.subtitle && <p className="text-white/70 text-lg font-light">{property.subtitle}</p>}
+              <div className="flex items-center gap-2 text-white/60 text-sm mt-3">
+                <Icon name="map-pin" className="w-4 h-4" />
+                {property.location}{property.subLocation && `, ${property.subLocation}`}
+              </div>
+            </div>
+            <div className="text-left md:text-right">
+              <div className="text-xs uppercase tracking-wider text-white/60 mb-1">{property.priceUnit || 'Starting from'}</div>
+              <div className="font-display text-3xl md:text-5xl font-light" style={{ color: '#90caf9' }}>{property.price}</div>
+            </div>
+          </div>
+
+          {/* Image Gallery — clean layout that adapts to image count */}
+          <div className="rounded-lg overflow-hidden">
+            {allImages.length === 1 ? (
+              // Single image — full width
+              <div
+                className="relative cursor-pointer group rounded-lg overflow-hidden bg-slate-800"
+                style={{ aspectRatio: '16/9', maxHeight: '500px' }}
+                onClick={() => { setLightboxImage(0); setLightboxOpen(true); }}
+              >
+                <img src={heroImage} alt={property.title} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
+                  <div className="opacity-0 group-hover:opacity-100 bg-white/95 px-4 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2 shadow-lg">
+                    <Icon name="zoom" className="w-4 h-4" />
+                    Click to enlarge
+                  </div>
+                </div>
+              </div>
+            ) : allImages.length === 2 ? (
+              // Two images — side by side
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ aspectRatio: '16/7', maxHeight: '500px' }}>
+                {allImages.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="relative cursor-pointer group rounded-lg overflow-hidden bg-slate-800"
+                    onClick={() => { setLightboxImage(idx); setLightboxOpen(true); }}
+                  >
+                    <img src={img} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // 3+ images — 1 large + grid of thumbnails (Provident style)
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3" style={{ aspectRatio: '16/8', maxHeight: '500px' }}>
+                {/* Main large image (left) */}
+                <div
+                  className="md:col-span-2 relative cursor-pointer group rounded-lg overflow-hidden bg-slate-800"
+                  onClick={() => { setLightboxImage(activeImage); setLightboxOpen(true); }}
+                >
+                  <img src={heroImage} alt={property.title} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
+                    <div className="opacity-0 group-hover:opacity-100 bg-white/95 px-4 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2 shadow-lg">
+                      <Icon name="zoom" className="w-4 h-4" />
+                      Click to enlarge
+                    </div>
+                  </div>
+                </div>
+
+                {/* Thumbnail grid (right) — hidden on mobile */}
+                <div className="hidden md:grid md:col-span-2 grid-cols-2 gap-3">
+                  {allImages.slice(1, 5).map((img, idx) => {
+                    const isLast = idx === 3 && allImages.length > 5;
+                    return (
+                      <div
+                        key={idx}
+                        className="relative cursor-pointer group rounded-lg overflow-hidden bg-slate-800"
+                        onClick={() => {
+                          if (isLast) {
+                            setLightboxImage(0);
+                            setLightboxOpen(true);
+                          } else {
+                            setActiveImage(idx + 1);
+                          }
+                        }}
+                      >
+                        <img src={img} alt="" className="w-full h-full object-cover" />
+                        {isLast && (
+                          <div className="absolute inset-0 bg-black/65 flex flex-col items-center justify-center text-white hover:bg-black/75 transition">
+                            <Icon name="zoom" className="w-6 h-6 mb-1" />
+                            <div className="font-display text-2xl font-light">+{allImages.length - 4}</div>
+                            <div className="text-xs uppercase tracking-wider mt-0.5">View All</div>
+                          </div>
+                        )}
+                        {!isLast && (
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile thumbnail strip (only on mobile, only when 2+ images) */}
+          {allImages.length > 1 && (
+            <div className="md:hidden flex gap-2 mt-3 overflow-x-auto pb-2">
+              {allImages.map((img, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveImage(idx)}
+                  className={`flex-shrink-0 w-20 h-20 rounded overflow-hidden border-2 transition ${activeImage === idx ? 'border-blue-500' : 'border-transparent opacity-60'}`}
+                >
+                  <img src={img} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* "View all photos" button — always visible if 3+ images */}
+          {allImages.length > 2 && (
+            <button
+              onClick={() => { setLightboxImage(0); setLightboxOpen(true); }}
+              className="md:hidden mt-3 w-full py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2"
+            >
+              <Icon name="zoom" className="w-4 h-4" />
+              View all {allImages.length} photos
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* QUICK STATS BAR */}
+      <section className="bg-white border-b border-slate-100">
+        <div className="max-w-7xl mx-auto px-6 lg:px-16 py-7">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+            {property.bedrooms && (
+              <Stat iconName="bed" label="Bedrooms" value={property.bedrooms} />
+            )}
+            {property.bathrooms && (
+              <Stat iconName="bath" label="Bathrooms" value={property.bathrooms} />
+            )}
+            {property.areaMin && (
+              <Stat
+                iconName="ruler"
+                label="Size"
+                value={`${property.areaMin}${property.areaMax > property.areaMin ? `-${property.areaMax}` : ''}`}
+                unit={property.unit || 'sq ft'}
+              />
+            )}
+            {property.completion && (
+              <Stat iconName="calendar" label="Handover" value={property.completion} />
+            )}
+            {property.roi && (
+              <Stat iconName="trending" label="Expected ROI" value={property.roi} />
+            )}
+            {!property.roi && property.paymentPlan && (
+              <Stat iconName="dollar" label="Payment Plan" value={property.paymentPlan} />
+            )}
           </div>
         </div>
       </section>
 
-      {/* Gallery */}
-      <section className="px-5 md:px-6 pt-6 md:pt-8 bg-white">
-        <div className="max-w-[1400px] mx-auto">
-          <div className="gallery-grid">
-            {property.gallery.slice(0, 5).map((img, i) => (
-              <div
-                key={i}
-                className="relative overflow-hidden cursor-pointer group"
-                onClick={() => { setActiveImage(i); setShowGallery(true); }}
+      {/* STICKY TAB NAV */}
+      <section className="sticky top-[80px] z-30 bg-white shadow-md border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-6 lg:px-16">
+          <div className="flex overflow-x-auto scrollbar-hide">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => scrollToSection(tab.id)}
+                className={`px-5 md:px-8 py-4 font-semibold text-sm whitespace-nowrap border-b-2 transition ${
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
               >
-                <img src={img} alt={`${property.title} ${i + 1}`} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" loading="lazy" />
-                {i === 4 && property.gallery.length > 5 && (
-                  <div className="absolute inset-0 bg-ink-950/60 flex items-center justify-center">
-                    <div className="text-white text-center">
-                      <div className="text-3xl font-light" style={{ fontFamily: "'Cormorant Garamond', serif" }}>
-                        +{property.gallery.length - 5}
-                      </div>
-                      <div className="text-[10px] tracking-[0.2em] uppercase">View All Photos</div>
-                    </div>
-                  </div>
-                )}
-                {/* View photos button on first image (mobile) */}
-                {i === 0 && (
-                  <button className="md:hidden absolute bottom-4 right-4 px-4 py-2 bg-white/95 text-ink-900 text-xs font-semibold uppercase tracking-wider">
-                    View All {property.gallery.length} Photos
-                  </button>
-                )}
-              </div>
+                {tab.label}
+              </button>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Lightbox */}
-      {showGallery && (
-        <div className="fixed inset-0 z-[100] bg-ink-950/95 flex items-center justify-center p-4 md:p-6" onClick={() => setShowGallery(false)}>
-          <button className="absolute top-4 md:top-6 right-4 md:right-6 text-white text-4xl hover:text-gold-400 transition-colors" onClick={() => setShowGallery(false)}>&times;</button>
-          <div className="absolute top-4 md:top-6 left-4 md:left-6 text-white/70 text-sm">
-            {activeImage + 1} / {property.gallery.length}
-          </div>
-          <img src={property.gallery[activeImage]} alt="" className="max-w-full max-h-full object-contain" onClick={e => e.stopPropagation()} />
-          {activeImage > 0 && (
-            <button className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-white text-4xl hover:text-gold-400 transition-colors" onClick={(e) => { e.stopPropagation(); setActiveImage(activeImage - 1); }}>‹</button>
-          )}
-          {activeImage < property.gallery.length - 1 && (
-            <button className="absolute right-4 md:right-6 top-1/2 -translate-y-1/2 text-white text-4xl hover:text-gold-400 transition-colors" onClick={(e) => { e.stopPropagation(); setActiveImage(activeImage + 1); }}>›</button>
-          )}
-        </div>
-      )}
+      {/* MAIN CONTENT */}
+      <div className="bg-slate-50 pb-24 lg:pb-0">
+        <div className="max-w-7xl mx-auto px-6 lg:px-16 py-10">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+            <div className="lg:col-span-2 space-y-12">
+              {/* OVERVIEW */}
+              <section ref={overviewRef} id="overview">
+                <SectionTitle>About This Property</SectionTitle>
+                {property.description && (
+                  <p className="text-lg text-slate-700 leading-relaxed mb-4">{property.description}</p>
+                )}
+                {property.longDescription && (
+                  <p className="text-slate-600 leading-relaxed">{property.longDescription}</p>
+                )}
 
-      {/* Main Content - IMPROVED TYPOGRAPHY */}
-      <section className="py-10 md:py-16 px-5 md:px-6 bg-white">
-        <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-10 lg:gap-12">
-          {/* Left Column */}
-          <div className="lg:col-span-2">
-            {/* Header */}
-            <div className="mb-10 md:mb-12">
-              <div className="flex items-center flex-wrap gap-3 mb-4">
-                <span className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] bg-gold-400 text-ink-900">
-                  {property.status}
-                </span>
-                <Link
-                  href={`/developers/${property.developer.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="text-[11px] text-ink-500 tracking-[0.2em] uppercase hover:text-gold-600 transition-colors"
-                >
-                  {property.developer}
-                </Link>
-              </div>
-
-              {/* IMPROVED: Better font hierarchy - cleaner Inter for readability */}
-              <h1 className="mb-3" style={{
-                fontFamily: "'Cormorant Garamond', serif",
-                fontWeight: 400,
-                fontSize: 'clamp(2rem, 5vw, 3.75rem)',
-                lineHeight: 1.1,
-                letterSpacing: '-0.015em',
-                color: '#0e1218',
-              }}>
-                {property.title}
-              </h1>
-
-              <p className="text-base md:text-lg text-ink-600 mb-4 font-normal" style={{ fontFamily: "'Inter', sans-serif" }}>
-                {property.subtitle}
-              </p>
-
-              <div className="flex items-center gap-2 text-sm text-ink-600 font-medium">
-                <svg className="w-4 h-4 text-gold-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/></svg>
-                <span>{property.location}</span>
-                <span className="text-ink-300">•</span>
-                <span className="text-ink-500">{property.subLocation}</span>
-              </div>
-            </div>
-
-            {/* Key Specs - IMPROVED */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 py-6 md:py-8 border-y border-gray-100 mb-10 md:mb-12">
-              <div>
-                <div className="text-[10px] tracking-[0.25em] uppercase text-ink-400 mb-2 font-semibold">Bedrooms</div>
-                <div className="text-2xl md:text-3xl font-semibold text-ink-900" style={{ fontFamily: "'Inter', sans-serif" }}>{property.bedrooms}</div>
-              </div>
-              <div>
-                <div className="text-[10px] tracking-[0.25em] uppercase text-ink-400 mb-2 font-semibold">Bathrooms</div>
-                <div className="text-2xl md:text-3xl font-semibold text-ink-900" style={{ fontFamily: "'Inter', sans-serif" }}>{property.bathrooms}</div>
-              </div>
-              <div>
-                <div className="text-[10px] tracking-[0.25em] uppercase text-ink-400 mb-2 font-semibold">Area</div>
-                <div className="text-2xl md:text-3xl font-semibold text-ink-900" style={{ fontFamily: "'Inter', sans-serif" }}>
-                  {property.areaMin.toLocaleString()}
-                  {property.areaMax !== property.areaMin && `-${property.areaMax.toLocaleString()}`}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-8 p-6 bg-white rounded-xl border border-slate-100">
+                  <InfoRow label="Property Type" value={property.type} />
+                  <InfoRow label="Status" value={property.status} />
+                  <InfoRow label="Developer" value={property.developer} />
+                  <InfoRow label="Location" value={property.location} />
+                  <InfoRow label="Sub-Location" value={property.subLocation} />
+                  <InfoRow label="Reference" value={property.slug?.toUpperCase().slice(0, 12)} />
                 </div>
-                <div className="text-[10px] text-ink-500 mt-1">{property.unit}</div>
-              </div>
-              <div>
-                <div className="text-[10px] tracking-[0.25em] uppercase text-ink-400 mb-2 font-semibold">Type</div>
-                <div className="text-base md:text-lg font-semibold text-ink-900 leading-tight" style={{ fontFamily: "'Inter', sans-serif" }}>{property.type}</div>
-              </div>
-            </div>
+              </section>
 
-            {/* Description - IMPROVED */}
-            <div className="mb-12 md:mb-16">
-              <h2 className="text-2xl md:text-4xl font-light text-ink-900 mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Overview</h2>
-              <div className="gold-line mb-6" />
-              <p className="text-ink-700 leading-relaxed mb-4 text-base" style={{ fontFamily: "'Inter', sans-serif" }}>
-                {property.description}
-              </p>
-              <p className="text-ink-600 leading-relaxed text-base" style={{ fontFamily: "'Inter', sans-serif" }}>
-                {property.longDescription}
-              </p>
-            </div>
-
-            {/* Highlights */}
-            <div className="mb-12 md:mb-16">
-              <h2 className="text-2xl md:text-4xl font-light text-ink-900 mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Property Highlights</h2>
-              <div className="gold-line mb-6 md:mb-8" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {property.features.map((f, i) => (
-                  <div key={i} className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gold-50 transition-colors border-l-2 border-gold-400">
-                    <svg className="w-4 h-4 text-gold-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
-                    <span className="text-sm text-ink-800 font-medium" style={{ fontFamily: "'Inter', sans-serif" }}>{f}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Amenities */}
-            <div className="mb-12 md:mb-16">
-              <h2 className="text-2xl md:text-4xl font-light text-ink-900 mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Amenities</h2>
-              <div className="gold-line mb-6 md:mb-8" />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-                {property.amenities.map((a, i) => (
-                  <div key={i} className="p-4 md:p-5 border border-gray-100 text-center hover:border-gold-400 hover:shadow-lg transition-all duration-300">
-                    <div className="w-10 h-10 mx-auto mb-3 bg-gold-50 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-gold-600" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"/></svg>
-                    </div>
-                    <div className="text-xs text-ink-700 font-medium" style={{ fontFamily: "'Inter', sans-serif" }}>{a.name}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Payment Plan */}
-            {property.paymentSchedule && (
-              <div className="mb-12 md:mb-16">
-                <h2 className="text-2xl md:text-4xl font-light text-ink-900 mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Payment Plan</h2>
-                <div className="gold-line mb-6 md:mb-8" />
-                <div className="bg-gray-50 p-6 md:p-8">
-                  <div className="text-center mb-6">
-                    <div className="text-[10px] tracking-[0.3em] uppercase text-gold-600 font-semibold mb-2">Payment Structure</div>
-                    <div className="text-4xl md:text-5xl font-light" style={{ fontFamily: "'Cormorant Garamond', serif" }}>{property.paymentPlan}</div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {property.paymentSchedule.map((p, i) => (
-                      <div key={i} className="text-center p-6 bg-white">
-                        <div className="text-3xl md:text-4xl font-light text-gold-600 mb-2" style={{ fontFamily: "'Cormorant Garamond', serif" }}>{p.percent}</div>
-                        <div className="text-sm font-semibold text-ink-900 mb-1" style={{ fontFamily: "'Inter', sans-serif" }}>{p.when}</div>
-                        <div className="text-xs text-ink-500">{p.note}</div>
+              {/* GALLERY */}
+              <section ref={galleryRef} id="gallery">
+                <SectionTitle>Gallery</SectionTitle>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {allImages.map((img, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => { setLightboxImage(idx); setLightboxOpen(true); }}
+                      className="aspect-square rounded-lg overflow-hidden cursor-pointer group relative"
+                    >
+                      <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-110 transition duration-500" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">
+                        <Icon name="zoom" className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition" />
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Nearby */}
-            {property.nearby && (
-              <div className="mb-12 md:mb-16">
-                <h2 className="text-2xl md:text-4xl font-light text-ink-900 mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>Location &amp; Nearby</h2>
-                <div className="gold-line mb-6 md:mb-8" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {property.nearby.map((n, i) => (
-                    <div key={i} className="flex justify-between items-center p-4 bg-gray-50 border-l-2 border-gold-400">
-                      <span className="text-sm text-ink-800 font-medium" style={{ fontFamily: "'Inter', sans-serif" }}>{n.name}</span>
-                      <span className="text-xs text-gold-600 tracking-wider uppercase font-semibold">{n.distance}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
+              </section>
 
-          {/* Right Column - Sticky Inquiry */}
-          <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-28">
-              <div className="bg-white border border-gray-100 shadow-lg mb-6">
-                <div className="p-6 md:p-8 bg-ink-900 text-white">
-                  <div className="text-[10px] tracking-[0.3em] uppercase text-gold-400 mb-2 font-semibold">{property.priceUnit}</div>
-                  <div className="text-4xl md:text-5xl font-light mb-4" style={{ fontFamily: "'Cormorant Garamond', serif" }}>{property.price}</div>
-                  {property.completion && (
-                    <div className="pt-4 border-t border-white/10">
-                      <div className="text-[10px] tracking-[0.25em] uppercase text-white/50 mb-1 font-semibold">Completion</div>
-                      <div className="text-sm font-semibold" style={{ fontFamily: "'Inter', sans-serif" }}>{property.completion}</div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-6 md:p-8">
-                  <h3 className="text-xl md:text-2xl font-light text-ink-900 mb-1" style={{ fontFamily: "'Cormorant Garamond', serif" }}>
-                    Inquire Now
-                  </h3>
-                  <p className="text-xs text-ink-500 mb-6">An advisor will contact you within 24 hours</p>
-
-                  {inquirySent ? (
-                    <div className="text-center py-10">
-                      <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
-                        <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
+              {/* FEATURES */}
+              {property.features?.length > 0 && (
+                <section ref={featuresRef} id="features">
+                  <SectionTitle>Key Features</SectionTitle>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {property.features.map((feat, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-4 bg-white rounded-lg border border-slate-100 hover:border-blue-200 transition">
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1e88e5, #1565c0)' }}>
+                          <Icon name="check" className="w-5 h-5 text-white" strokeWidth={3} />
+                        </div>
+                        <span className="text-slate-700 font-medium pt-1">{feat}</span>
                       </div>
-                      <div className="text-sm font-semibold text-ink-900 mb-1">Inquiry Received</div>
-                      <div className="text-xs text-ink-500">We&apos;ll be in touch shortly</div>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleSubmit} className="space-y-3">
-                      <input type="text" placeholder="Full Name *" required className="form-input text-sm" />
-                      <input type="email" placeholder="Email *" required className="form-input text-sm" />
-                      <input type="tel" placeholder="Phone *" required className="form-input text-sm" />
-                      <textarea rows="3" placeholder="Your message" defaultValue={`I'm interested in ${property.title}`} className="form-input text-sm" />
-                      <button type="submit" className="btn btn-gold w-full text-[10px]">
-                        Request Information
-                      </button>
-                    </form>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-gray-100">
-                    <a href="tel:+97142772373" className="flex items-center justify-center gap-2 py-3 border border-gray-200 hover:border-gold-400 hover:text-gold-600 transition-colors text-xs font-semibold">
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"/></svg>
-                      Call
-                    </a>
-                    <a href="https://wa.me/971527313111" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 border border-green-500 text-green-600 hover:bg-green-50 transition-colors text-xs font-semibold">
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347"/></svg>
-                      WhatsApp
-                    </a>
+                    ))}
                   </div>
-                </div>
-              </div>
-
-              {property.roi && (
-                <div className="bg-gradient-to-br from-gold-50 to-gold-100 p-6 border border-gold-200">
-                  <div className="text-[10px] tracking-[0.3em] uppercase text-gold-700 mb-2 font-semibold">Expected ROI</div>
-                  <div className="text-4xl font-light text-gold-700" style={{ fontFamily: "'Cormorant Garamond', serif" }}>{property.roi}</div>
-                  <div className="text-xs text-ink-600 mt-2">Estimated annual return based on comparable investments</div>
-                </div>
+                </section>
               )}
+
+              {/* AMENITIES */}
+              {property.amenities?.length > 0 && (
+                <section ref={amenitiesRef} id="amenities">
+                  <SectionTitle>Amenities & Facilities</SectionTitle>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {property.amenities.map((amenity, idx) => (
+                      <div key={idx} className="flex flex-col items-center text-center p-5 bg-white rounded-xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition">
+                        <div className="w-14 h-14 rounded-full mb-3 flex items-center justify-center" style={{ background: '#e8f1fb' }}>
+                          <Icon name={AMENITY_ICON_MAP[amenity.icon] || 'check-circle'} className="w-6 h-6" stroke="#1565c0" />
+                        </div>
+                        <div className="text-sm font-semibold text-center" style={{ color: '#0f2444' }}>{amenity.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* LOCATION */}
+              <section ref={locationRef} id="location">
+                <SectionTitle>Location</SectionTitle>
+                <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+                  <div className="aspect-[16/9] bg-slate-100 relative">
+                    <iframe
+                      src={`https://maps.google.com/maps?q=${property.location_coords?.lat || 25.2048},${property.location_coords?.lng || 55.2708}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0 }}
+                      allowFullScreen
+                      loading="lazy"
+                      title="Property Location"
+                    />
+                  </div>
+
+                  <div className="p-6 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1e88e5, #1565c0)' }}>
+                        <Icon name="map-pin" className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <div className="font-display text-xl font-medium" style={{ color: '#0f2444' }}>{property.location}</div>
+                        {property.subLocation && <div className="text-slate-500">{property.subLocation}</div>}
+                        <a
+                          href={`https://www.google.com/maps?q=${property.location_coords?.lat || 25.2048},${property.location_coords?.lng || 55.2708}`}
+                          target="_blank" rel="noopener"
+                          className="inline-flex items-center gap-2 text-sm font-semibold mt-3"
+                          style={{ color: '#1565c0' }}
+                        >
+                          Open in Google Maps
+                          <Icon name="external" className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  {property.nearby?.length > 0 && (
+                    <div className="p-6">
+                      <h4 className="font-semibold mb-4" style={{ color: '#0f2444' }}>Nearby Landmarks</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {property.nearby.map((place, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <Icon name="map-pin" className="w-4 h-4 text-slate-400" />
+                              <span className="text-slate-700">{place.name}</span>
+                            </div>
+                            <span className="text-sm font-semibold" style={{ color: '#1565c0' }}>{place.distance}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* PAYMENT PLAN */}
+              {property.paymentSchedule?.length > 0 && (
+                <section ref={paymentRef} id="payment">
+                  <SectionTitle>Payment Plan</SectionTitle>
+                  <div className="bg-white rounded-xl border border-slate-100 p-6">
+                    <div className="grid gap-3">
+                      {property.paymentSchedule.map((stage, idx) => (
+                        <div key={idx} className="flex items-center gap-4 p-4 rounded-lg border" style={{ borderColor: '#e8edf2', background: idx === 0 ? '#f4f8fd' : 'white' }}>
+                          <div className="text-3xl font-display font-light" style={{ color: '#1565c0', minWidth: '70px' }}>{stage.percent}</div>
+                          <div className="flex-1">
+                            <div className="font-semibold" style={{ color: '#0f2444' }}>{stage.when}</div>
+                            {stage.note && <div className="text-sm text-slate-500">{stage.note}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+            </div>
+
+            {/* SIDEBAR */}
+            <div className="lg:col-span-1">
+              <div className="lg:sticky lg:top-[200px] space-y-4">
+                <ContactCard property={property} onShowForm={() => setShowInquiryForm(true)} />
+                <ShareCard property={property} />
+              </div>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* Related Properties */}
-      {related.length > 0 && (
-        <section className="py-12 md:py-20 px-5 md:px-6" style={{ background: '#f8f6f1' }}>
-          <div className="max-w-[1400px] mx-auto">
-            <div className="text-center mb-10 md:mb-12">
-              <div className="eyebrow eyebrow-center">You May Also Like</div>
-              <h2 className="text-3xl md:text-5xl font-light text-ink-900" style={{ fontFamily: "'Cormorant Garamond', serif" }}>
-                Similar <em className="italic text-gold-600">Properties</em>
-              </h2>
+      {/* MOBILE CTA */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-2xl z-50 p-3 flex gap-2">
+        <a href="tel:+971502345678" className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-900 rounded-lg font-semibold text-sm">
+          <Icon name="phone" className="w-4 h-4" /> Call
+        </a>
+        <a href={`https://wa.me/971502345678?text=Hi! I'm interested in ${property.title}`} target="_blank" className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-lg font-semibold text-sm">
+          <Icon name="whatsapp" className="w-4 h-4" fill="currentColor" stroke="none" /> WhatsApp
+        </a>
+        <button onClick={() => setShowInquiryForm(true)} className="flex-1 flex items-center justify-center gap-2 py-3 text-white rounded-lg font-semibold text-sm" style={{ background: 'linear-gradient(135deg, #1e88e5 0%, #1565c0 100%)' }}>
+          <Icon name="email" className="w-4 h-4" /> Inquire
+        </button>
+      </div>
+
+      {/* LIGHTBOX */}
+      {lightboxOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col" onClick={() => setLightboxOpen(false)}>
+          {/* Top bar: counter + close */}
+          <div className="flex items-center justify-between p-4 text-white">
+            <div className="text-sm font-medium bg-white/10 backdrop-blur px-4 py-2 rounded-full">
+              {lightboxImage + 1} <span className="text-white/50">/ {allImages.length}</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {related.map((p) => (
-                <Link key={p.slug} href={`/properties/${p.slug}`} className="property-card hover-lift group">
-                  <div className="img-wrap">
-                    <img src={p.coverImage} alt={p.title} loading="lazy" />
-                    <div className="property-badge">{p.status}</div>
-                  </div>
-                  <div className="property-card-body">
-                    <div className="text-[10px] tracking-[0.2em] uppercase text-gold-600 mb-2">{p.location}</div>
-                    <h3 className="text-xl md:text-2xl font-light text-ink-900 mb-3" style={{ fontFamily: "'Cormorant Garamond', serif" }}>{p.title}</h3>
-                    <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                      <div className="price-tag text-lg">{p.price}</div>
-                      <div className="text-[10px] text-ink-500">{p.bedrooms} BR</div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
+              className="hover:text-blue-300 transition p-2 bg-white/10 backdrop-blur rounded-full"
+              aria-label="Close"
+            >
+              <Icon name="close" className="w-5 h-5" />
+            </button>
           </div>
-        </section>
+
+          {/* Main image area */}
+          <div className="flex-1 flex items-center justify-center px-4 relative">
+            {allImages.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setLightboxImage((lightboxImage - 1 + allImages.length) % allImages.length); }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-blue-300 z-10 p-3 bg-white/10 backdrop-blur rounded-full transition hover:bg-white/20"
+                  aria-label="Previous image"
+                >
+                  <Icon name="chevron-left" className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setLightboxImage((lightboxImage + 1) % allImages.length); }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-blue-300 z-10 p-3 bg-white/10 backdrop-blur rounded-full transition hover:bg-white/20"
+                  aria-label="Next image"
+                >
+                  <Icon name="chevron-right" className="w-6 h-6" />
+                </button>
+              </>
+            )}
+            <img
+              src={allImages[lightboxImage]}
+              alt={`${property.title} - Photo ${lightboxImage + 1}`}
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+
+          {/* Thumbnail strip at bottom */}
+          {allImages.length > 1 && (
+            <div className="px-4 pb-4 pt-2" onClick={(e) => e.stopPropagation()}>
+              <div className="max-w-full overflow-x-auto scrollbar-hide">
+                <div className="flex gap-2 justify-center min-w-min">
+                  {allImages.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={(e) => { e.stopPropagation(); setLightboxImage(idx); }}
+                      className={`flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-md overflow-hidden border-2 transition ${
+                        lightboxImage === idx ? 'border-white opacity-100' : 'border-transparent opacity-50 hover:opacity-80'
+                      }`}
+                    >
+                      <img src={img} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Help text */}
+          <div className="text-center text-xs text-white/40 pb-2 hidden md:block">
+            Press ESC to close · ← → to navigate
+          </div>
+        </div>
       )}
+
+      {showInquiryForm && (
+        <InquiryFormModal property={property} onClose={() => setShowInquiryForm(false)} />
+      )}
+
+      <style jsx global>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </>
+  );
+}
+
+// ──────────────────────────────────────────
+function Stat({ iconName, label, value, unit }) {
+  return (
+    <div className="text-center md:text-left">
+      <div className="w-11 h-11 rounded-full flex items-center justify-center mb-2 mx-auto md:mx-0" style={{ background: '#e8f1fb' }}>
+        <Icon name={iconName} className="w-5 h-5" stroke="#1565c0" />
+      </div>
+      <div className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">{label}</div>
+      <div className="font-display text-xl md:text-2xl font-medium" style={{ color: '#0f2444' }}>
+        {value} {unit && <span className="text-sm text-slate-400 font-normal">{unit}</span>}
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <h2 className="font-display text-3xl md:text-4xl font-light mb-6" style={{ color: '#0f2444' }}>
+      {children}
+    </h2>
+  );
+}
+
+function InfoRow({ label, value }) {
+  if (!value) return null;
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">{label}</div>
+      <div className="font-semibold" style={{ color: '#0f2444' }}>{value}</div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
+function ContactCard({ property, onShowForm }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-lg">
+      <div className="p-6 text-white" style={{ background: 'linear-gradient(135deg, #0f2444 0%, #1565c0 100%)' }}>
+        <div className="text-xs uppercase tracking-wider text-white/70 mb-1">Interested in this property?</div>
+        <div className="font-display text-xl font-light">Talk to a Citiway expert</div>
+      </div>
+      <div className="p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-14 h-14 rounded-full overflow-hidden bg-slate-100 flex-shrink-0">
+            <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&q=80" alt="Agent" className="w-full h-full object-cover" />
+          </div>
+          <div>
+            <div className="font-semibold" style={{ color: '#0f2444' }}>Citiway Concierge</div>
+            <div className="text-xs text-slate-500">Available 24/7</div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <a href="tel:+971502345678" className="w-full flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-900 rounded-lg font-semibold text-sm hover:bg-slate-200 transition">
+            <Icon name="phone" className="w-4 h-4" /> Call Now
+          </a>
+          <a href={`https://wa.me/971502345678?text=Hi! I'm interested in ${property.title}`} target="_blank" className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-lg font-semibold text-sm hover:bg-green-700 transition">
+            <Icon name="whatsapp" className="w-4 h-4" fill="currentColor" stroke="none" /> WhatsApp Us
+          </a>
+          <button onClick={onShowForm} className="w-full flex items-center justify-center gap-2 py-3 text-white rounded-lg font-semibold text-sm hover:opacity-90 transition" style={{ background: 'linear-gradient(135deg, #1e88e5 0%, #1565c0 100%)' }}>
+            <Icon name="email" className="w-4 h-4" /> Send Inquiry
+          </button>
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-2 gap-4 text-center">
+          <div>
+            <Icon name="award" className="w-7 h-7 mx-auto mb-1" stroke="#1565c0" />
+            <div className="text-xs text-slate-500">Award-winning service</div>
+          </div>
+          <div>
+            <Icon name="users" className="w-7 h-7 mx-auto mb-1" stroke="#1565c0" />
+            <div className="text-xs text-slate-500">15+ years in Dubai</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShareCard({ property }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="font-semibold mb-3" style={{ color: '#0f2444' }}>Share This Property</div>
+      <div className="flex gap-2">
+        <button onClick={handleCopy} className="flex-1 flex items-center justify-center gap-2 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold">
+          <Icon name={copied ? 'check' : 'copy'} className="w-4 h-4" />
+          {copied ? 'Copied!' : 'Copy Link'}
+        </button>
+        <a href={`https://wa.me/?text=${encodeURIComponent(`Check this property: ${property.title} - ${typeof window !== 'undefined' ? window.location.href : ''}`)}`} target="_blank" className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center justify-center" title="WhatsApp">
+          <Icon name="whatsapp" className="w-4 h-4" fill="currentColor" stroke="none" />
+        </a>
+        <a href={`mailto:?subject=${encodeURIComponent(property.title)}&body=${encodeURIComponent(`Check this property: ${typeof window !== 'undefined' ? window.location.href : ''}`)}`} className="px-4 py-2 bg-slate-700 text-white rounded-lg flex items-center justify-center" title="Email">
+          <Icon name="email" className="w-4 h-4" />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function InquiryFormModal({ property, onClose }) {
+  const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await supabase.from('leads').insert([{
+        ...form,
+        property_slug: property.slug,
+        source: 'property-detail-page',
+        status: 'new',
+      }]);
+      setSuccess(true);
+      setTimeout(() => onClose(), 2500);
+    } catch (e) {
+      alert('Submission failed. Please try again or call us directly.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white max-w-lg w-full rounded-xl shadow-2xl my-8" onClick={(e) => e.stopPropagation()}>
+        {success ? (
+          <div className="p-12 text-center">
+            <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <Icon name="check" className="w-10 h-10 text-green-600" strokeWidth={3} />
+            </div>
+            <h3 className="font-display text-2xl mb-2" style={{ color: '#0f2444' }}>Thank You!</h3>
+            <p className="text-slate-600">Our team will reach out to you shortly.</p>
+          </div>
+        ) : (
+          <>
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-display text-2xl font-light" style={{ color: '#0f2444' }}>Send Inquiry</h3>
+                <p className="text-sm text-slate-500 mt-1">Re: {property.title}</p>
+              </div>
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-2">
+                <Icon name="close" className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <input type="text" required placeholder="Full Name *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ borderColor: '#e8edf2' }} />
+              <input type="email" required placeholder="Email *" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ borderColor: '#e8edf2' }} />
+              <input type="tel" required placeholder="Phone (with country code) *" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ borderColor: '#e8edf2' }} />
+              <textarea placeholder="Your message (optional)" rows={4} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ borderColor: '#e8edf2' }} />
+              <button type="submit" disabled={submitting} className="w-full py-3 text-white font-semibold rounded-lg disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1e88e5 0%, #1565c0 100%)' }}>
+                {submitting ? 'Sending...' : 'Send Inquiry'}
+              </button>
+              <p className="text-xs text-slate-400 text-center">By submitting, you agree to be contacted by Citiway.</p>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

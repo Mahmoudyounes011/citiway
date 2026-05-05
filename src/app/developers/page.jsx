@@ -1,19 +1,63 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { developers } from '../../data/developers';
+import { developers as staticDevelopers } from '../../data/developers';
+import { supabase } from '../../lib/supabase';
 
 export default function DevelopersPage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [allDevelopers, setAllDevelopers] = useState(staticDevelopers);
+
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('developers')
+          .select('*')
+          .order('name', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          // Map Supabase format to component format
+          const mapped = data.map(d => ({
+            slug: d.slug,
+            name: d.name,
+            tagline: d.description ? d.description.slice(0, 80) : 'Trusted Dubai developer',
+            established: d.founded ? parseInt(d.founded) : null,
+            headquarters: d.headquartered || 'Dubai, UAE',
+            logo: d.name?.toUpperCase().slice(0, 8) || 'DEV',
+            coverImage: d.cover_image || d.logo || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1600&q=80',
+            logoImage: d.logo || d.cover_image,
+            featured: d.featured,
+            projectCount: 0,
+            totalUnits: '—',
+            description: d.description || '',
+            website: d.website,
+          }));
+
+          // Merge: admin developers take precedence (by slug)
+          const adminSlugs = new Set(mapped.map(m => m.slug));
+          const staticNotInAdmin = staticDevelopers.filter(s => !adminSlugs.has(s.slug));
+          const combined = [...mapped, ...staticNotInAdmin];
+          console.log(`[Citiway] Loaded ${mapped.length} developers from admin + ${staticNotInAdmin.length} sample developers`);
+          setAllDevelopers(combined);
+        } else {
+          console.log('[Citiway] No developers in admin yet, showing samples');
+        }
+      } catch (e) {
+        console.warn('[Citiway] Developer load error:', e.message);
+      }
+    };
+    loadFromSupabase();
+  }, []);
 
   const filtered = useMemo(() => {
-    if (!searchQuery) return developers;
+    if (!searchQuery) return allDevelopers;
     const q = searchQuery.toLowerCase();
-    return developers.filter(d =>
-      d.name.toLowerCase().includes(q) ||
-      d.tagline.toLowerCase().includes(q)
+    return allDevelopers.filter(d =>
+      d.name?.toLowerCase().includes(q) ||
+      d.tagline?.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, allDevelopers]);
 
   const featured = filtered.filter(d => d.featured);
   const others = filtered.filter(d => !d.featured);
@@ -58,7 +102,7 @@ export default function DevelopersPage() {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-6 md:gap-12 mt-10 pt-8 border-t border-white/10 max-w-2xl">
             <div>
-              <div className="text-2xl md:text-4xl font-light text-gold-300" style={{ fontFamily: "'Cormorant Garamond', serif" }}>{developers.length}+</div>
+              <div className="text-2xl md:text-4xl font-light text-gold-300" style={{ fontFamily: "'Cormorant Garamond', serif" }}>{allDevelopers.length}+</div>
               <div className="text-[10px] md:text-xs text-white/60 tracking-wider uppercase mt-1">Top Developers</div>
             </div>
             <div>

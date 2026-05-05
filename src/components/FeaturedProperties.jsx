@@ -1,6 +1,8 @@
 'use client';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getFeaturedProperties } from '../data/properties';
+import { supabase } from '../lib/supabase';
 import { useReveal } from '../hooks/useReveal';
 
 function PropertyCard({ property, index }) {
@@ -45,8 +47,45 @@ function PropertyCard({ property, index }) {
 }
 
 export default function FeaturedProperties() {
-  const featured = getFeaturedProperties().slice(0, 6);
+  const staticFeatured = getFeaturedProperties().slice(0, 6);
+  const [featured, setFeatured] = useState(staticFeatured);
   const [headerRef, headerVisible] = useReveal(0.2);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('properties')
+          .select('*')
+          .eq('featured', true)
+          .eq('hidden', false)
+          .order('created_at', { ascending: false })
+          .limit(6);
+
+        if (!error && data && data.length > 0) {
+          const mapped = data.map(p => ({
+            slug: p.slug,
+            title: p.title,
+            location: p.location,
+            subLocation: p.sub_location,
+            category: p.category,
+            status: p.status,
+            price: p.price,
+            priceUnit: p.price_unit,
+            bedrooms: p.bedrooms,
+            coverImage: p.cover_image,
+          }));
+          // Merge admin + static, dedupe by slug, max 6
+          const adminSlugs = new Set(mapped.map(m => m.slug));
+          const staticNotInAdmin = staticFeatured.filter(s => !adminSlugs.has(s.slug));
+          setFeatured([...mapped, ...staticNotInAdmin].slice(0, 6));
+        }
+      } catch (e) {
+        // Keep static fallback
+      }
+    };
+    load();
+  }, []);
 
   return (
     <section className="py-20 md:py-32 px-5 md:px-12 lg:px-24 bg-white relative overflow-hidden">

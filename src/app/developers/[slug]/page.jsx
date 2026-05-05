@@ -1,14 +1,71 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getDeveloperBySlug } from '../../../data/developers';
 import { getPropertiesByDeveloper } from '../../../data/properties';
+import { supabase } from '../../../lib/supabase';
 
 export default function DeveloperDetail() {
   const params = useParams();
-  const developer = getDeveloperBySlug(params.slug);
+  const [developer, setDeveloper] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [inquirySent, setInquirySent] = useState(false);
+
+  useEffect(() => {
+    if (!params.slug) return;
+    const loadDeveloper = async () => {
+      try {
+        // Try Supabase first
+        const { data, error } = await supabase
+          .from('developers')
+          .select('*')
+          .eq('slug', params.slug)
+          .single();
+
+        if (!error && data) {
+          // Map Supabase to component format
+          setDeveloper({
+            slug: data.slug,
+            name: data.name,
+            tagline: data.description?.slice(0, 80) || 'Trusted Dubai developer',
+            established: data.founded ? parseInt(data.founded) : null,
+            headquarters: data.headquartered || 'Dubai, UAE',
+            logo: data.name?.toUpperCase().slice(0, 8) || 'DEV',
+            coverImage: data.cover_image || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1600&q=80',
+            logoImage: data.logo || data.cover_image,
+            featured: data.featured,
+            description: data.description || '',
+            longDescription: data.description || '',
+            website: data.website,
+            specialties: [],
+            awards: [],
+            signatureProjects: [],
+            projectCount: 0,
+            totalUnits: '—',
+          });
+        } else {
+          // Fall back to static
+          const staticDev = getDeveloperBySlug(params.slug);
+          if (staticDev) setDeveloper(staticDev);
+        }
+      } catch (e) {
+        const staticDev = getDeveloperBySlug(params.slug);
+        if (staticDev) setDeveloper(staticDev);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadDeveloper();
+  }, [params.slug]);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   if (!developer) {
     return (

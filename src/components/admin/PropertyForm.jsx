@@ -48,6 +48,7 @@ export default function PropertyForm({ existingProperty, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [activeTab, setActiveTab] = useState('basic');
 
   const isEdit = !!existingProperty;
@@ -122,24 +123,28 @@ export default function PropertyForm({ existingProperty, onSaved }) {
     updateField(field, newArr);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (action = 'save') => {
     setError('');
+    setSuccessMessage('');
 
     // Validation
-    if (!property.title) return setError('Title is required');
-    if (!property.slug) return setError('Slug is required');
-    if (!property.location) return setError('Location is required');
+    if (!property.title) { setActiveTab('basic'); return setError('Title is required'); }
+    if (!property.slug) { setActiveTab('basic'); return setError('Slug is required'); }
+    if (!property.location) { setActiveTab('basic'); return setError('Location is required'); }
+    if (!property.category) { setActiveTab('basic'); return setError('Category is required (Off-Plan, Sale, or Rent)'); }
 
     setSaving(true);
     try {
       const dataToSave = {
         ...property,
-        // Clean empty array entries
         features: (property.features || []).filter(Boolean),
         amenities: (property.amenities || []).filter(a => a.name),
         nearby: (property.nearby || []).filter(n => n.name),
         payment_schedule: (property.payment_schedule || []).filter(p => p.when),
       };
+
+      let savedSlug = property.slug;
+      let savedCategory = property.category;
 
       if (isEdit) {
         const { error } = await supabase
@@ -148,16 +153,42 @@ export default function PropertyForm({ existingProperty, onSaved }) {
           .eq('slug', existingProperty.slug);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('properties')
-          .insert([dataToSave]);
+          .insert([dataToSave])
+          .select()
+          .single();
         if (error) throw error;
+        savedSlug = data.slug;
+        savedCategory = data.category;
       }
 
-      if (onSaved) onSaved();
-      else router.push('/admin/properties');
+      // Determine public URL
+      const categoryPath = savedCategory === 'rent' ? '/rent' : savedCategory === 'sale' ? '/properties' : '/off-plan';
+
+      // Handle different actions
+      if (action === 'view') {
+        window.open(`/properties/${savedSlug}`, '_blank');
+        router.push('/admin/properties');
+      } else if (action === 'add-another') {
+        setProperty(EMPTY_PROPERTY);
+        setActiveTab('basic');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setSuccessMessage(`✓ Property saved! View it at ${categoryPath} or /properties/${savedSlug}`);
+        setTimeout(() => setSuccessMessage(''), 6000);
+      } else {
+        if (onSaved) onSaved();
+        else router.push('/admin/properties');
+      }
     } catch (err) {
-      setError(err.message);
+      // More detailed error message
+      let errorMsg = err.message || 'Save failed';
+      if (errorMsg.includes('duplicate')) {
+        errorMsg = `A property with slug "${property.slug}" already exists. Please use a different slug.`;
+      } else if (errorMsg.includes('row-level security')) {
+        errorMsg = 'Permission denied. Make sure you are logged in.';
+      }
+      setError(errorMsg);
     } finally {
       setSaving(false);
     }
@@ -192,7 +223,7 @@ export default function PropertyForm({ existingProperty, onSaved }) {
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => handleSave('save')}
             disabled={saving}
             className="px-6 py-2.5 text-white font-semibold text-sm rounded-lg shadow hover:shadow-lg transition disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, #1e88e5 0%, #1565c0 100%)' }}
@@ -203,6 +234,7 @@ export default function PropertyForm({ existingProperty, onSaved }) {
       </div>
 
       {error && <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">{error}</div>}
+      {successMessage && <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-2">{successMessage}</div>}
 
       {/* Tab Navigation */}
       <div className="bg-white rounded-t-lg shadow-sm border border-slate-100 overflow-x-auto">
@@ -761,19 +793,35 @@ export default function PropertyForm({ existingProperty, onSaved }) {
       </div>
 
       {/* Sticky Save Bar at bottom */}
-      <div className="sticky bottom-4 mt-6 bg-white p-4 rounded-lg shadow-2xl border border-slate-200 flex items-center justify-between gap-4">
+      <div className="sticky bottom-4 mt-6 bg-white p-4 rounded-lg shadow-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="text-xs text-slate-500">
           {isEdit ? '✏️ Editing existing property' : '➕ Creating new property'}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => router.push('/admin/properties')}
             className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-semibold text-sm"
           >
             Cancel
           </button>
+          {!isEdit && (
+            <button
+              onClick={() => handleSave('add-another')}
+              disabled={saving}
+              className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-semibold text-sm disabled:opacity-50"
+            >
+              💾 Save & Add Another
+            </button>
+          )}
           <button
-            onClick={handleSave}
+            onClick={() => handleSave('view')}
+            disabled={saving}
+            className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-semibold text-sm disabled:opacity-50"
+          >
+            👁️ Save & View Live
+          </button>
+          <button
+            onClick={() => handleSave('save')}
             disabled={saving}
             className="px-6 py-2 text-white font-semibold text-sm rounded-lg shadow disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, #1e88e5 0%, #1565c0 100%)' }}

@@ -1,10 +1,40 @@
 'use client';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { developers } from '../data/developers';
+import { developers as staticDevelopers } from '../data/developers';
 import { useReveal } from '../hooks/useReveal';
+import { supabase } from '../lib/supabase';
 
 export default function DevelopersMarquee() {
   const [ref, visible] = useReveal(0.2);
+  const [developers, setDevelopers] = useState(staticDevelopers);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('developers')
+          .select('*')
+          .order('name', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          const mapped = data.map(d => ({
+            slug: d.slug,
+            name: d.name,
+            logo: d.name?.toUpperCase().slice(0, 8) || 'DEV',
+            logoImage: d.logo || d.cover_image,
+          }));
+          // Merge: admin first, then static (deduped by slug)
+          const adminSlugs = new Set(mapped.map(m => m.slug));
+          const staticNotInAdmin = staticDevelopers.filter(s => !adminSlugs.has(s.slug));
+          setDevelopers([...mapped, ...staticNotInAdmin]);
+        }
+      } catch (e) {
+        // Keep static fallback
+      }
+    };
+    load();
+  }, []);
 
   // Duplicate for seamless loop
   const allDevs = [...developers, ...developers];
