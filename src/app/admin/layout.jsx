@@ -20,14 +20,16 @@ export default function AdminLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    // Check auth status
+    // Secondary, client-side UX gate. The AUTHORITATIVE check is the
+    // server-side middleware; getUser() (not getSession()) validates the
+    // token against the auth server so this never trusts raw cookies.
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session && pathname !== '/admin/login') {
-        router.push('/admin/login');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user && pathname !== '/admin/login') {
+        router.replace(`/admin/login?redirectTo=${encodeURIComponent(pathname)}`);
         return;
       }
-      setUser(session?.user || null);
+      setUser(user || null);
       setLoading(false);
     };
     checkAuth();
