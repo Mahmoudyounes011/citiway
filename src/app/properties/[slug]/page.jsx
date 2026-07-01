@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { properties as staticProperties } from '../../../data/properties';
 import { supabase } from '../../../lib/supabase';
+import { submitLead, honeypotInputProps } from '../../../lib/submitLead';
 import { Icon, AMENITY_ICON_MAP } from '../../../components/Icons';
 
 const TABS = [
@@ -758,23 +759,29 @@ function ShareCard({ property }) {
 
 function InquiryFormModal({ property, onClose }) {
   const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' });
+  const [company, setCompany] = useState(''); // honeypot
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    setError('');
     try {
-      await supabase.from('leads').insert([{
-        ...form,
-        property_slug: property.slug,
-        source: 'property-detail-page',
-        status: 'new',
-      }]);
+      await submitLead({
+        formType: property.category === 'off-plan' ? 'offplan-inquiry' : 'property-inquiry',
+        company, // honeypot
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        message: form.message,
+        propertySlug: property.slug,
+      });
       setSuccess(true);
       setTimeout(() => onClose(), 2500);
-    } catch (e) {
-      alert('Submission failed. Please try again or call us directly.');
+    } catch (err) {
+      setError(err.message || 'Submission failed. Please try again or call us directly.');
     } finally {
       setSubmitting(false);
     }
@@ -803,6 +810,8 @@ function InquiryFormModal({ property, onClose }) {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <input {...honeypotInputProps} value={company} onChange={(e) => setCompany(e.target.value)} />
+              {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
               <input type="text" required placeholder="Full Name *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ borderColor: '#e8edf2' }} />
               <input type="email" required placeholder="Email *" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ borderColor: '#e8edf2' }} />
               <input type="tel" required placeholder="Phone (with country code) *" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ borderColor: '#e8edf2' }} />
