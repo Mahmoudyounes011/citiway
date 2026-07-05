@@ -1,13 +1,14 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { supabase } from '../../lib/supabase';
+import { submitLead, honeypotInputProps } from '../../lib/submitLead';
 import { Icon } from '../../components/Icons';
 
 export default function ContactPage() {
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: '', phone: '', subject: '', message: '',
   });
+  const [company, setCompany] = useState(''); // honeypot
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -18,16 +19,15 @@ export default function ContactPage() {
     setError('');
 
     try {
-      const { error: dbError } = await supabase.from('leads').insert([{
+      await submitLead({
+        formType: 'contact',
+        company, // honeypot
         name: `${form.firstName} ${form.lastName}`.trim(),
         email: form.email,
         phone: form.phone,
-        message: `${form.subject ? `[${form.subject}]\n\n` : ''}${form.message}`,
-        source: 'contact-page',
-        status: 'new',
-      }]);
-
-      if (dbError) throw dbError;
+        subject: form.subject,
+        message: form.message,
+      });
 
       setSent(true);
       setForm({ firstName: '', lastName: '', email: '', phone: '', subject: '', message: '' });
@@ -130,6 +130,7 @@ export default function ContactPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-5">
+                  <input {...honeypotInputProps} value={company} onChange={(e) => setCompany(e.target.value)} />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: '#0f2444' }}>First Name *</label>

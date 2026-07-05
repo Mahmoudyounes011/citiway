@@ -3,4 +3,7 @@ node_modules/
 out/
 .DS_Store
 *.tsbuildinfo
-.env*.local
+# Environment / secrets — never commit real values
+.env
+.env.*
+!.env.example

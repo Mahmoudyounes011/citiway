@@ -1,9 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// createBrowserClient stores the auth session in COOKIES (not localStorage),
+// so the server-side middleware can read and validate it on every request.
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 // Helper: Check if user is logged in
 export async function getUser() {

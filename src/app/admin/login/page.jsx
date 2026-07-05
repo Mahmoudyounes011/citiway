@@ -10,10 +10,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Where to send the user after a successful login (set by middleware).
+  const getRedirectTarget = () => {
+    if (typeof window === 'undefined') return '/admin';
+    const raw = new URLSearchParams(window.location.search).get('redirectTo');
+    // Only allow internal, single-slash, non-login paths (no open redirect).
+    if (raw && raw.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/admin/login')) {
+      return raw;
+    }
+    return '/admin';
+  };
+
   useEffect(() => {
-    // Redirect if already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push('/admin');
+    // Redirect if already logged in. getUser() validates against the auth
+    // server — we never trust getSession()'s unverified cookie contents.
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) router.replace(getRedirectTarget());
     });
   }, [router]);
 
@@ -31,7 +43,9 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push('/admin');
+      // Full navigation so the freshly-set auth cookies are sent to the
+      // server and the middleware sees the authenticated session.
+      window.location.assign(getRedirectTarget());
     }
   };
 

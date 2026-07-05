@@ -77,7 +77,7 @@ If you deployed to Vercel and admin works locally but not on production:
 
 1. Go to **vercel.com → your project → Settings → Environment Variables**
 2. Verify these EXIST:
-   - `NEXT_PUBLIC_SUPABASE_URL` = `https://ziuumdhkwzzexolyxmbr.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://<your-project-ref>.supabase.co`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = `sb_publishable_...`
 3. If missing → add them
 4. Go to **Deployments → click latest → Redeploy**
@@ -86,7 +86,7 @@ If you deployed to Vercel and admin works locally but not on production:
 
 ## 🔍 STEP 7 — Verify in Supabase Directly
 
-1. Go to **https://supabase.com/dashboard/project/ziuumdhkwzzexolyxmbr/editor**
+1. Go to **https://supabase.com/dashboard/project/<your-project-ref>/editor**
 2. Click on the **`properties`** table
 3. Find your property
 4. Check:

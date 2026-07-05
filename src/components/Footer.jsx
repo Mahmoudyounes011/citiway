@@ -1,16 +1,29 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
+import { submitLead, honeypotInputProps } from '../lib/submitLead';
 
 export default function Footer() {
   const [email, setEmail] = useState('');
+  const [company, setCompany] = useState(''); // honeypot
   const [subscribed, setSubscribed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubscribed(true);
-    setEmail('');
-    setTimeout(() => setSubscribed(false), 3000);
+    setSubmitting(true);
+    setError('');
+    try {
+      await submitLead({ formType: 'newsletter', company, email });
+      setSubscribed(true);
+      setEmail('');
+      setTimeout(() => setSubscribed(false), 3000);
+    } catch (err) {
+      setError(err.message || 'Could not subscribe. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -73,7 +86,9 @@ export default function Footer() {
                 <div className="text-white/60 text-sm">You\'ll hear from us soon.</div>
               </div>
             ) : (
+              <>
               <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
+                <input {...honeypotInputProps} value={company} onChange={(e) => setCompany(e.target.value)} />
                 <input
                   type="email"
                   required
@@ -82,10 +97,12 @@ export default function Footer() {
                   placeholder="Your email address"
                   className="flex-1 form-input-glass"
                 />
-                <button type="submit" className="btn btn-gold whitespace-nowrap">
-                  <span>Subscribe</span>
+                <button type="submit" disabled={submitting} className="btn btn-gold whitespace-nowrap disabled:opacity-50">
+                  <span>{submitting ? 'Subscribing…' : 'Subscribe'}</span>
                 </button>
               </form>
+              {error && <p className="text-red-300 text-xs mt-3">{error}</p>}
+              </>
             )}
             <p className="text-white/30 text-[10px] tracking-wider mt-4">
               By subscribing, you agree to our privacy policy. Unsubscribe anytime.
